@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Word Fleet — Letter Battleship</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚓</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@500;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css" />
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="world"></div>
+
+  <!-- ============ HOME ============ -->
+  <section id="screen-home" class="screen center">
+    <div class="card home-card">
+      <h1 class="logo">WORD <span>FLEET</span></h1>
+      <p class="tagline">Hide your words. Fire your letters. Sink the enemy fleet!</p>
+      <label class="lbl">Captain name</label>
+      <input id="in-name" maxlength="16" placeholder="Your name" autocomplete="off" />
+      <label class="lbl">Fleet colour</label>
+      <div id="color-pick" class="color-pick"></div>
+      <div class="home-actions">
+        <div class="box">
+          <h3>Host a game</h3>
+          <label class="check"><input type="checkbox" id="in-spectator" /> Teacher mode (host watches, doesn't play)</label>
+          <button id="btn-create" class="btn gold big">⚓ Create Room</button>
+        </div>
+        <div class="box">
+          <h3>Join a game</h3>
+          <input id="in-code" maxlength="4" placeholder="ROOM CODE" class="code-input" autocomplete="off" />
+          <button id="btn-join" class="btn teal big">🚢 Join</button>
+        </div>
+      </div>
+      <button id="btn-howto" class="btn ghost small">📖 How to play</button>
+    </div>
+  </section>
+
+  <!-- ============ LOBBY ============ -->
+  <section id="screen-lobby" class="screen center hidden">
+    <div class="card lobby-card">
+      <div class="lobby-head">
+        <div>
+          <div class="muted">Room code</div>
+          <div id="lobby-code" class="room-code">----</div>
+        </div>
+        <div class="muted small-note">Share this code with your class.<br />Up to 6 captains.</div>
+      </div>
+      <div class="lobby-grid">
+        <div>
+          <h3>Captains</h3>
+          <ul id="lobby-players" class="plist"></ul>
+          <div id="lobby-colors" class="color-pick small"></div>
+        </div>
+        <div>
+          <h3>Game options <span id="host-badge" class="badge">host only</span></h3>
+          <div id="lobby-settings" class="settings"></div>
+        </div>
+      </div>
+      <div class="row end">
+        <button id="btn-leave" class="btn ghost">Leave</button>
+        <button id="btn-start" class="btn gold big">Start ⚓</button>
+      </div>
+      <div id="lobby-wait" class="muted center-text">Waiting for the host to start…</div>
+    </div>
+  </section>
+
+  <!-- ============ SETUP ============ -->
+  <section id="screen-setup" class="screen center hidden">
+    <div class="card setup-card">
+      <h2>⚓ Build your secret fleet</h2>
+      <p class="muted">Each ship hides a word with exactly that many letters. Tip: words that share lots of letters are risky — one shot can damage several ships!</p>
+      <div id="setup-ships" class="setup-ships"></div>
+      <div id="setup-letters" class="setup-letters"></div>
+      <div class="row end">
+        <button id="btn-random-all" class="btn ghost">🎲 Random fleet</button>
+        <button id="btn-ready" class="btn gold big">Ready! ⚓</button>
+      </div>
+      <div id="setup-status" class="setup-status"></div>
+      <div id="setup-host" class="row end hidden">
+        <button id="btn-cancel-setup" class="btn ghost">Back to lobby</button>
+        <button id="btn-force" class="btn teal">Start battle now (random words for anyone not ready)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BATTLE HUD ============ -->
+  <section id="hud" class="hidden">
+    <div id="topbar">
+      <div id="round-pill" class="pill">Round 1</div>
+      <div id="turn-banner" class="turn-banner"><span id="turn-text">—</span><div id="timer-bar"><div id="timer-fill"></div></div></div>
+      <div class="top-tools">
+        <button id="btn-cam-overview" class="btn icon" title="Overview">🗺️</button>
+        <button id="btn-cam-me" class="btn icon" title="My fleet">⚓</button>
+        <button id="btn-autocam" class="btn icon on" title="Auto camera">🎥</button>
+        <button id="btn-sound" class="btn icon" title="Sound">🔊</button>
+        <button id="btn-menu" class="btn icon" title="Menu">☰</button>
+      </div>
+    </div>
+
+    <aside id="left">
+      <div class="panel">
+        <h4>Fleets</h4>
+        <div id="fleet-list"></div>
+      </div>
+      <div class="panel log-panel">
+        <h4>Battle log</h4>
+        <div id="log"></div>
+      </div>
+    </aside>
+
+    <aside id="right">
+      <div class="panel" id="my-panel">
+        <h4>My fleet <span id="my-coins" class="coins">🪙 0</span></h4>
+        <div id="my-fleet"></div>
+        <div id="my-defenses" class="defenses"></div>
+      </div>
+      <div class="panel" id="shop-panel">
+        <h4>Shop <span class="muted tiny">buy any time</span></h4>
+        <div id="shop"></div>
+      </div>
+    </aside>
+
+    <div id="bottom" class="panel">
+      <div id="target-head"></div>
+      <div id="target-fleet"></div>
+      <div id="keyboard"></div>
+      <div class="fire-row">
+        <div id="fire-hint" class="muted"></div>
+        <button id="btn-fire" class="btn red big">🔥 FIRE</button>
+      </div>
+    </div>
+
+    <div id="big-msg" class="big-msg hidden"></div>
+  </section>
+
+  <!-- ============ GAME OVER ============ -->
+  <section id="screen-over" class="screen center hidden">
+    <div class="card over-card">
+      <h1 id="over-title" class="logo small">VICTORY</h1>
+      <div id="over-reason" class="muted"></div>
+      <table id="over-table" class="over-table"></table>
+      <div id="over-words" class="over-words"></div>
+      <div class="row end">
+        <button id="btn-view-map" class="btn ghost">🗺️ View the ocean</button>
+        <button id="btn-leave2" class="btn ghost">Leave</button>
+        <button id="btn-again" class="btn gold big">Play again ⚓</button>
+      </div>
+    </div>
+  </section>
+  <button id="btn-back-results" class="btn gold hidden floating">🏆 Back to results</button>
+
+  <!-- ============ MODAL / TOAST ============ -->
+  <div id="modal" class="modal hidden"><div class="modal-card"><h3 id="modal-title"></h3><div id="modal-body"></div><div class="row end"><button id="modal-cancel" class="btn ghost">Cancel</button></div></div></div>
+  <div id="toasts"></div>
+  <div id="conn-status" class="conn hidden">Reconnecting…</div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
