@@ -57,7 +57,6 @@ const P = (b, id) => b.state.players.find(p => p.id === id);
   host.send('settings', { key: 'fleetSize', value: '3' });
   host.send('settings', { key: 'turnTime', value: '30' });
   host.send('settings', { key: 'startCoins', value: '200' });
-  host.send('settings', { key: 'maxRounds', value: '0' });
   host.send('settings', { key: 'fleetSize', value: '99' }); // invalid, ignored
   await wait(150);
   assert.strictEqual(a.state.settings.fleetSize, 3);
@@ -76,10 +75,17 @@ const P = (b, id) => b.state.players.find(p => p.id === id);
   assert.ok(a.errors.length >= 3, 'validation errors: ' + a.errors.join(' | '));
   a.errors = [];
 
+  // dictionary check: made-up words are rejected even when the online dictionary is unreachable
+  a.send('setFleet', { words: ['XQZ', 'SHIP', 'OCEAN'] });
+  await wait(3500);
+  assert.ok(!me(a).ready, 'gibberish fleet must not be accepted');
+  assert.ok(a.errors.some(e => /Not a real word: XQZ/.test(e)), 'dictionary error: ' + a.errors.join(' | '));
+  a.errors = [];
+
   // Ava: CAT SHIP OCEAN  Ben: DOG FISH WHALE ; Cai left to auto-fill via forceStart
   a.send('setFleet', { words: ['cat', 'ship', 'ocean'] });
   b.send('setFleet', { words: ['DOG', 'FISH', 'WHALE'] });
-  await wait(3800); // dictionary lookup may time out (offline)
+  await wait(150); // known words are accepted straight from the offline word list
   assert.ok(me(a).ready && me(b).ready, 'a,b ready ' + a.errors.join(','));
   // others can't see Ava's fleet during setup; spectator can
   assert.strictEqual(P(b, a.state.you).fleet.length, 0);
@@ -173,6 +179,23 @@ const P = (b, id) => b.state.players.find(p => p.id === id);
   await wait(80);
   assert.ok(c.errors.length === 1);
 
+  // Spent letters / repeated torpedo guesses are refused without using up the turn
+  assert.strictEqual(a.state.turnId, ids.a);
+  a.send('guessWord', { target: ids.b, ship: 1, word: 'DISH' }); // wrong (FISH)
+  await wait(100);
+  assert.strictEqual(a.state.turnId, ids.b);
+  b.send('fire', { target: ids.a, letter: 'Z' }); // miss
+  await wait(100);
+  assert.strictEqual(a.state.turnId, ids.c);
+  assert.ok(P(c, ids.a).spent.includes('Z'));
+  c.errors = [];
+  c.send('fire', { target: ids.a, letter: 'Z' }); // already missed Ava's fleet
+  c.send('guessWord', { target: ids.b, ship: 1, word: 'DISH' }); // already guessed
+  await wait(100);
+  assert.strictEqual(c.errors.length, 2, 'spent shots refused: ' + c.errors.join(' | '));
+  assert.strictEqual(c.state.turnId, ids.c, 'still Cai\'s turn');
+  assert.strictEqual(me(c).shotsLeft, 1, 'no shot used');
+
   // Play out: each bot fires letters of enemies' words until game over
   const alphabet = 'EAOISHNTRLCDUPMGBFYWKVXZJQ'.split('');
   let guard = 0;
@@ -214,6 +237,18 @@ const P = (b, id) => b.state.players.find(p => p.id === id);
   host.send('forceStart');
   await wait(150);
   assert.ok(a2.state.turnRemaining > 25000);
+  assert.strictEqual(a2.state.round, 1);
+
+  // a brief disconnect mid-turn must not skip the turn (which gave the opponent extra shots)
+  assert.strictEqual(a2.state.turnId, ids.a);
+  await wait(4500);
+  a2.ws.close();
+  await wait(1200);
+  assert.strictEqual(host.state.turnId, ids.a, 'turn kept during short disconnect');
+  const a3 = await bot('Ava3');
+  a3.send('resume', { code, token: tok.token });
+  await wait(150);
+  assert.strictEqual(a3.state.turnId, ids.a);
 
   console.log('host errors:', host.errors);
   console.log('✅ All simulation checks passed');

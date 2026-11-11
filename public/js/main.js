@@ -205,7 +205,7 @@ function showHowTo() {
     <li>Hit letters catch fire and are shown to everyone. Sink a ship by hitting all its letters…</li>
     <li>…or fire a <b>torpedo</b>: guess the whole word. Right = instant sink + bonus coins!</li>
     <li>Earn 🪙 coins for hits and sinks. Spend them in the <b>shop</b> any time: shields, extinguishers, smoke screens, sonar and more.</li>
-    <li>The last fleet afloat wins — or the top score when the rounds run out.</li>
+    <li>The battle goes on until every fleet but one has sunk — the last fleet afloat wins!</li>
   </ol><p>Tips: use the keyboard to pick letters and <b>Enter</b> to fire. Drag to look around, scroll to zoom, right-drag to pan, and click a fleet to target it.</p></div>`);
 }
 
@@ -245,7 +245,6 @@ function applyState(s) {
 
 // ---------------------------------------------------------------- LOBBY
 const SETTING_DEFS = [
-  { key: 'maxRounds', label: 'Rounds', opts: [0, 5, 10, 15, 20, 25, 30], fmt: v => v ? `${v} rounds` : 'Until one fleet is left' },
   { key: 'turnTime', label: 'Turn timer', opts: [0, 30, 45, 60, 90, 120], fmt: v => v ? `${v} seconds` : 'No timer' },
   { key: 'fleetSize', label: 'Fleet size', opts: [3, 4, 5, 6], fmt: v => `${v} ships` },
   { key: 'shipSet', label: 'Word lengths', opts: ['short', 'standard', 'long'], fmt: v => ({ short: 'Short (2+ letters)', standard: 'Standard (3+ letters)', long: 'Long (4+ letters)' })[v] },
@@ -405,7 +404,7 @@ function tilesHtml(f, opts = {}) {
 function renderHud(s, me) {
   const isMyTurn = s.turnId === s.you;
   const cur = s.players.find(p => p.id === s.turnId);
-  $('round-pill').textContent = `Round ${s.round}${s.settings.maxRounds ? ' / ' + s.settings.maxRounds : ''}`;
+  $('round-pill').textContent = `Round ${s.round}`;
   $('turn-banner').classList.toggle('mine', isMyTurn);
   $('turn-text').innerHTML = isMyTurn
     ? `🎯 YOUR TURN${me.shotsLeft > 1 ? ` — ${me.shotsLeft} shots` : ''}${me.barrage ? ' · 💣 Barrage loaded' : ''}`
@@ -466,21 +465,22 @@ function renderHud(s, me) {
 
   // keyboard
   const hist = t.history || {};
+  const spent = new Set(t.spent || []);
   const showKeys = !me.spectator;
   $('keyboard').classList.toggle('hidden', !showKeys);
   $('btn-fire').classList.toggle('hidden', !showKeys);
-  $('keyboard').innerHTML = ALPHA.map(L => `<button class="key ${hist[L] || ''} ${L === ui.selLetter ? 'sel' : ''} ${VOWELS.includes(L) ? 'vowel' : ''}" data-l="${L}" ${me.alive ? '' : 'disabled'} title="${hist[L] ? 'Already fired: ' + hist[L] : ''}">${L}</button>`).join('');
+  $('keyboard').innerHTML = ALPHA.map(L => `<button class="key ${hist[L] || ''} ${L === ui.selLetter ? 'sel' : ''} ${VOWELS.includes(L) ? 'vowel' : ''}" data-l="${L}" ${me.alive && !spent.has(L) ? '' : 'disabled'} title="${hist[L] ? 'Already fired: ' + hist[L] : ''}">${L}</button>`).join('');
   $('keyboard').querySelectorAll('.key').forEach(k => k.onclick = () => { ui.selLetter = k.dataset.l; sfx('click'); renderHud(ui.state, ui.state.players.find(p => p.id === ui.state.you)); });
   const fire = $('btn-fire');
-  fire.disabled = !(canAct && ui.selLetter);
+  fire.disabled = !(canAct && ui.selLetter && !spent.has(ui.selLetter));
   fire.textContent = ui.selLetter ? `🔥 FIRE “${ui.selLetter}”` : '🔥 FIRE';
   let hint = '';
   if (me.spectator) hint = 'Spectating';
   else if (!me.alive) hint = 'Your fleet has sunk — you can still watch the battle.';
   else if (!isMyTurn) hint = `Waiting for ${cur ? esc(cur.name) : 'next captain'}… you can still use the shop.`;
   else if (!ui.selLetter) hint = 'Choose a letter (or press a key)' + (guessOn ? ', or click a ship to guess its word.' : '.');
-  else if (hist[ui.selLetter] === 'miss') hint = `“${ui.selLetter}” already missed this fleet — are you sure?`;
-  else if (hist[ui.selLetter] === 'hit') hint = `“${ui.selLetter}” already hit here. Fire again only if a fire was put out.`;
+  else if (spent.has(ui.selLetter)) hint = `“${ui.selLetter}” has already been fired at ${esc(t.name)} — pick a different letter.`;
+  else if (hist[ui.selLetter] === 'hit') hint = `A fire was put out — “${ui.selLetter}” can hit ${esc(t.name)} again!`;
   else if (hist[ui.selLetter] === 'blocked') hint = `A shield blocked “${ui.selLetter}” before — it's gone now, so try again!`;
   else hint = `Fire “${ui.selLetter}” at ${esc(t.name)}${me.barrage ? ' — and everyone else (Barrage)!' : ''}`;
   $('fire-hint').innerHTML = hint;
@@ -543,6 +543,7 @@ function openGuess(t, shipIdx) {
     const go = () => {
       const w = inp.value.trim();
       if (w.length !== f.len) return toast(`Needs ${f.len} letters.`, true);
+      if (f.wrong.includes(w)) return toast(`${w} was already guessed for this ship.`, true);
       const clash = f.letters.findIndex((c, j) => c && w[j] !== c);
       if (clash >= 0 && !confirm(`Letter ${clash + 1} should be "${f.letters[clash]}". Fire anyway?`)) return;
       ui.firing = true;
@@ -559,6 +560,8 @@ function doFire() {
   const s = ui.state; if (!s || s.phase !== 'battle') return;
   const me = s.players.find(p => p.id === s.you);
   if (s.turnId !== s.you || !ui.selLetter || !ui.selTarget || ui.firing || me.shotsLeft <= 0) return;
+  const t = s.players.find(p => p.id === ui.selTarget);
+  if (t && (t.spent || []).includes(ui.selLetter)) return toast(`“${ui.selLetter}” has already been fired at ${t.name} — pick a different letter.`, true);
   ui.firing = true;
   send('fire', { target: ui.selTarget, letter: ui.selLetter });
   ui.selLetter = null;
@@ -624,7 +627,7 @@ function renderOver(s, me) {
   if (!r) return;
   const w = r.rows[0];
   $('over-title').innerHTML = w && w.id === s.you ? '🏆 VICTORY!' : `🏆 ${esc(w ? w.name : '')} WINS!`;
-  $('over-reason').textContent = { last: 'Last fleet afloat!', rounds: 'All rounds played — highest score wins.', host: 'The host ended the battle.' }[r.reason] || '';
+  $('over-reason').textContent = { last: 'Last fleet afloat!', host: 'The host ended the battle.' }[r.reason] || '';
   $('over-table').innerHTML = `<tr><th>#</th><th>Captain</th><th>Hits</th><th>Ships sunk</th><th>Torpedoes</th><th>Ships afloat</th><th>Final score</th></tr>` +
     r.rows.map((row, i) => `<tr class="${i === 0 ? 'first' : ''}"><td>${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</td>
       <td><span style="color:${row.color}">●</span> ${esc(row.name)}${row.id === s.you ? ' (you)' : ''}</td><td>${row.hits}</td><td>${row.sinks}</td><td>${row.words}</td><td>${row.afloat}</td><td>${row.final}</td></tr>`).join('');

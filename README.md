@@ -11,7 +11,7 @@ Every ship hides a secret word. Captains take turns firing **letters** at an ene
    - Every copy of that letter in that fleet is hit and revealed in flames.
    - Or fire a **torpedo**: guess a whole word. Correct = instant sink + bonus.
 4. Earn coins for hits (+10 per letter), sinks (+25) and torpedoes (+30). Spend them in the shop **at any time**.
-5. Last fleet afloat wins, or the highest score when the rounds run out (+15 per surviving ship).
+5. The battle continues until every fleet but one is sunk — the last fleet afloat wins.
 
 ### Shop
 
@@ -28,7 +28,7 @@ Every ship hides a secret word. Captains take turns firing **letters** at an ene
 
 ### Host options
 
-Rounds (5–30 or until one fleet is left) · turn timer (off–120 s) · fleet size (3–6 ships) · word lengths (short / standard / long) · starting coins · coins per turn · shop on/off (all, defences only, attacks only) · dictionary check · torpedo on/off.
+Turn timer (off–120 s) · fleet size (3–6 ships) · word lengths (short / standard / long) · starting coins · coins per turn · shop on/off (all, defences only, attacks only) · dictionary check (offline word list, real words only) · torpedo on/off.
 
 **Teacher mode:** tick "Teacher mode" when creating a room to host without playing. The teacher sees every fleet's words during setup, can send a fleet back with "Ask to change", can force-start with random words for anyone not ready, and can reveal all words during the battle (don't project that screen!).
 
@@ -68,6 +68,7 @@ server.js         HTTP static server + WebSocket rooms
 lib/game.js       Game rules, turns, shop, scoring (server-authoritative)
 lib/ws.js         Minimal WebSocket implementation
 lib/words.js      Built-in kid-friendly word bank (2–9 letters)
+lib/dictionary.js Offline dictionary check (lib/dictionary.txt, ~72k words from SCOWL)
 public/index.html Screens and HUD
 public/style.css  Styles
 public/js/main.js UI + networking
